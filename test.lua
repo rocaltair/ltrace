@@ -27,8 +27,8 @@ end
 xpcall(function()
 	b()
 end, function(err)
-	print(err)
-	print(ltrace.getfulltrace())
+	io.stderr:write(err .. "\n")
+	io.stderr:write(ltrace.getfulltrace() .. "\n")
 	--[[
 	local fullstack = ltrace.getstack()
 	local list = ltrace.dumpstack(fullstack)

@@ -1,0 +1,238 @@
+--[[
+Path : ltrace.lua
+Author : Roc <RocAltair@gmail.com>
+CreateTime : 2016-01-21 19:15:34
+Description : Description
+--]]
+
+local IS_LUAJIT = jit and true or false
+local TABLE_MAX_DUMP_LEVEL = 10
+local TABLE_IGNORE_KEY_MAP = {}
+
+local getenv
+local getstack_from
+local getstack
+local dumpvalue
+local dumptable
+local dumpframe
+local dumpstack
+local getfulltrace
+
+local traceback = {}
+
+function getenv(realframe)
+        local env = {}
+	local indexmap = {}
+        local i = 1 
+        local funcinfo = debug.getinfo(realframe, "nlSf")
+	if not funcinfo then
+		return 
+	end
+        local k, v = debug.getlocal(realframe, i)
+        while k do
+		indexmap[k] = i
+                env[k] = v 
+                i = i + 1 
+                k, v = debug.getlocal(realframe, i)
+        end 
+
+        setmetatable(env, {__index = getfenv(funcinfo.func)})
+        return env, funcinfo, indexmap
+end
+
+function getstack_from(callfile, callline, maxframesz)
+	assert(callfile and callline)
+	local realframe = 0
+	local framestack = {}
+	local env, funcinfo, indexmap = getenv(realframe)
+	while funcinfo do
+		if funcinfo.currentline == callline and funcinfo.short_src == callfile then
+			break
+		end
+		realframe = realframe + 1
+		env, funcinfo, indexmap = getenv(realframe)
+	end
+	while funcinfo do
+		realframe = realframe + 1
+		env, funcinfo, indexmap = getenv(realframe)
+		if not funcinfo then
+			break
+		end
+		table.insert(framestack, {
+			realframe = realframe,
+			env = env,
+			funcinfo = funcinfo,
+			indexmap = indexmap,
+		})
+		if maxframesz and #framestack >= maxframesz then
+			break
+		end
+	end
+	return framestack
+end
+
+local function get_params(func)
+	if not IS_LUAJIT then
+		return {}, -1, false
+	end
+	local info = debug.getinfo(func)
+	if not info then return end  
+	local argNameList = {} 
+	for i=1, info.nparams do
+		local name = debug.getlocal(func, i)
+		table.insert(argNameList, name)
+	end  
+	if info.isvararg then 
+		table.insert(argNameList, "...")
+	end  
+	return argNameList, info.nparams, info.isvararg
+end
+
+local function compare(a, b)
+	local ta = type(a)
+	local tb = type(b)
+	if ta ~= tb then
+		return tostring(a) < tostring(b)
+	end
+	return a < b
+end
+
+local function pairs_orderly(t, comp)
+	comp = comp or compare
+	local keys = {}
+	table.foreach(t, function(k, v)
+		table.insert(keys, k)
+	end)
+	local size = #keys
+	table.sort(keys, comp)
+
+	local i = 0
+	return function(tbl, k)
+		i = i + 1
+		if i > size then
+			return
+		end
+		return keys[i], t[keys[i]]
+	end
+end
+
+
+function dumptable(value, depth)
+	assert(type(value) == "table")
+	local rettbl = {}
+	depth = (depth or 0) + 1
+	if depth >= TABLE_MAX_DUMP_LEVEL then
+		return "{...}"
+	end
+
+	table.insert(rettbl, '{')
+	local content = {}
+	for k, v in pairs_orderly(value) do
+		if not TABLE_IGNORE_KEY_MAP[k] then
+			local line = {}
+			table.insert(line, dumpkey(k, depth) .. "=")
+			table.insert(line, dumpvalue(v, depth))
+			table.insert(content, table.concat(line))
+		end
+	end
+	table.insert(rettbl, table.concat(content, ", "))
+	table.insert(rettbl, '}')
+	return table.concat(rettbl)
+end
+
+function dumpkey(key, depth)
+	local vtype = type(key)
+	if vtype == "table" then 
+		return "[" .. dumptable(key, depth) .. "]"
+	elseif vtype == "string" then
+		if key:match("^%d") or  key:match("%w+") ~= key then
+			return "[" .. string.format("%q", key) .. "]"
+		end
+		return tostring(key)
+	end
+	return "[" .. tostring(key) .. "]"
+end
+
+function dumpvalue(v, depth)
+	local vtype = type(v)
+	if vtype == "table" then 
+		return dumptable(v, depth)
+	elseif vtype == "string" then
+		return string.format("%q", v)
+	elseif vtype == "number" or vtype == "boolean" then
+		return tostring(v)
+	end
+	return string.format("<%s>", tostring(v))
+end
+
+function dumpframe(frameidx, env, funcinfo, indexmap)
+	local fix = -1
+	if funcinfo.what ~= "Lua" then
+		local fname = funcinfo.name or funcinfo.what or funcinfo.namewhat
+		return string.format("%d[C] : in <%s>", frameidx + fix, fname)
+	end
+
+	local out = {}
+	local args = get_params(funcinfo.func)
+	local funcinfoStr = ""
+	if funcinfo.name then
+		local argsStr = table.concat(args, ", ")
+		funcinfoStr = string.format("in <%s(%s)>", funcinfo.name, argsStr)
+	end
+
+        local frameInfoStr = string.format("%d @%s:%d %s",
+					   frameidx + fix,
+					   funcinfo.short_src or "<stdin>",
+					   funcinfo.currentline,
+					   funcinfoStr)
+	table.insert(out, frameInfoStr)
+
+	local valuelines = {}
+	local function compare(k1, k2)
+		return indexmap[k1] < indexmap[k2]
+	end
+	for k, v in pairs_orderly(env, compare) do
+		local vs = dumpvalue(v)
+		table.insert(valuelines, string.format("\t%s:%s", k, vs))
+	end
+
+	table.insert(out, table.concat(valuelines, "\n"))
+	return table.concat(out, "\n")
+end
+
+function dumpstack(stack)
+	local list = {}
+	for i, v in pairs(stack) do
+		local s = dumpframe(i, v.env, v.funcinfo, v.indexmap)
+		table.insert(list, s)
+	end
+	return list
+end
+
+function getstack(level)
+	level = level or 2
+	local info = debug.getinfo(level, "nlSf")
+	local stacklist = getstack_from(info.short_src, info.currentline)
+	return stacklist
+end
+
+function getfulltrace(level)
+	local fullstack = getstack(level)
+	local list = dumpstack(fullstack)
+	local ret = {}
+	table.foreach(list, function(i, v)
+		table.insert(ret, v)
+	end)
+	return table.concat(ret, "\n")
+end
+
+traceback.getenv = getenv
+traceback.getstack_from = getstack_from
+traceback.getstack = getstack
+traceback.dumpvalue = dumpvalue
+traceback.dumptable = dumptable
+traceback.dumpframe = dumpframe
+traceback.dumpstack = dumpstack
+traceback.getfulltrace = getfulltrace
+
+return traceback

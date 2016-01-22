@@ -21,7 +21,7 @@ function b()
 	local bt = {1,5,256,"234", a = {b = "v"}}
 	local bs = "this is a string"
 	local bn = 4234239
-	a()
+	a("xx", "yy")
 end
 
 xpcall(function()

@@ -20,13 +20,6 @@ local mTABLE_MAX_DEEP = 3
 local mVALUE_MAX_LEN = 5120
 local traceback = {}
 
-local function isModule(v)
-	local flag = rawget(v, "__FILE__")
-			and rawget(v, "__RELAPATHFILE__")
-			and rawget(v, "__IMPORT_TIME__")
-	return flag
-end
-
 local function canPrint(k, v)
 	if type(v) ~= "table" then
 		return true

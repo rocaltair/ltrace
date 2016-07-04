@@ -6,8 +6,6 @@ Description : Description
 --]]
 
 local IS_LUAJIT = jit and true or false
-local TABLE_MAX_DUMP_LEVEL = 10
-local TABLE_IGNORE_KEY_MAP = {}
 
 local getenv
 local getstack_from
@@ -18,26 +16,45 @@ local dumpframe
 local dumpstack
 local getfulltrace
 
+local mTABLE_MAX_DEEP = 3
+local mVALUE_MAX_LEN = 5120
 local traceback = {}
 
-function getenv(realframe)
-        local env = {}
-	local indexmap = {}
-        local i = 1 
-        local funcinfo = debug.getinfo(realframe, "nlSf")
-	if not funcinfo then
-		return 
-	end
-        local k, v = debug.getlocal(realframe, i)
-        while k do
-		indexmap[k] = i
-                env[k] = v 
-                i = i + 1 
-                k, v = debug.getlocal(realframe, i)
-        end 
+local function isModule(v)
+	local flag = rawget(v, "__FILE__")
+			and rawget(v, "__RELAPATHFILE__")
+			and rawget(v, "__IMPORT_TIME__")
+	return flag
+end
 
-        setmetatable(env, {__index = getfenv(funcinfo.func)})
-        return env, funcinfo, indexmap
+local function canPrint(k, v)
+	if type(v) ~= "table" then
+		return true
+	end
+	if v == _G then
+		return false
+	end
+	return true
+end
+
+function getenv(realframe)
+	local env = {}
+	local indexmap = {}
+	local i = 1
+	local funcinfo = debug.getinfo(realframe, "nlSf")
+	if not funcinfo then
+		return
+	end
+	local k, v = debug.getlocal(realframe, i)
+	while k do
+		indexmap[k] = i
+		env[k] = v
+		i = i + 1
+		k, v = debug.getlocal(realframe, i)
+	end
+
+	setmetatable(env, {__index = getfenv(funcinfo.func)})
+	return env, funcinfo, indexmap
 end
 
 function getstack_from(callfile, callline, maxframesz)
@@ -76,22 +93,22 @@ local function get_params(func)
 		return {}, -1, false
 	end
 	local info = debug.getinfo(func)
-	if not info then return end  
-	local argNameList = {} 
-	for i=1, info.nparams do
+	if not info then return end
+	local argNameList = {}
+	for i = 1, info.nparams do
 		local name = debug.getlocal(func, i)
 		table.insert(argNameList, name)
-	end  
-	if info.isvararg then 
+	end
+	if info.isvararg then
 		table.insert(argNameList, "...")
-	end  
+	end
 	return argNameList, info.nparams, info.isvararg
 end
 
 local function compare(a, b)
 	local ta = type(a)
 	local tb = type(b)
-	if ta ~= tb then
+	if ta ~= tb or ta == "table" then
 		return tostring(a) < tostring(b)
 	end
 	return a < b
@@ -116,19 +133,21 @@ local function pairs_orderly(t, comp)
 	end
 end
 
+local ignoreMap = {
+}
 
 function dumptable(value, depth)
 	assert(type(value) == "table")
 	local rettbl = {}
 	depth = (depth or 0) + 1
-	if depth >= TABLE_MAX_DUMP_LEVEL then
+	if depth > mTABLE_MAX_DEEP then
 		return "{...}"
 	end
 
 	table.insert(rettbl, '{')
 	local content = {}
 	for k, v in pairs_orderly(value) do
-		if not TABLE_IGNORE_KEY_MAP[k] then
+		if not ignoreMap[k] and canPrint(k, v) then
 			local line = {}
 			table.insert(line, dumpkey(k, depth) .. "=")
 			table.insert(line, dumpvalue(v, depth))
@@ -142,7 +161,7 @@ end
 
 function dumpkey(key, depth)
 	local vtype = type(key)
-	if vtype == "table" then 
+	if vtype == "table" then
 		return "[" .. dumptable(key, depth) .. "]"
 	elseif vtype == "string" then
 		if key:match("^%d") or  key:match("%w+") ~= key then
@@ -155,7 +174,7 @@ end
 
 function dumpvalue(v, depth)
 	local vtype = type(v)
-	if vtype == "table" then 
+	if vtype == "table" then
 		return dumptable(v, depth)
 	elseif vtype == "string" then
 		return string.format("%q", v)
@@ -165,35 +184,44 @@ function dumpvalue(v, depth)
 	return string.format("<%s>", tostring(v))
 end
 
+
 function dumpframe(frameidx, env, funcinfo, indexmap)
 	local fix = -1
 	if funcinfo.what ~= "Lua" then
-		local fname = funcinfo.name or funcinfo.what or funcinfo.namewhat
-		return string.format("%d[C] : in <%s>", frameidx + fix, fname)
+		return string.format("%d[C] : in <%s>",
+			     frameidx + fix,
+			     funcinfo.name or funcinfo.what or funcinfo.namewhat
+			     )
 	end
 
 	local out = {}
 	local args = get_params(funcinfo.func)
-	local funcinfoStr = ""
+	local funcstr = ""
 	if funcinfo.name then
-		local argsStr = table.concat(args, ", ")
-		funcinfoStr = string.format("in <%s(%s)>", funcinfo.name, argsStr)
+		funcstr = string.format("in <%s(%s)>",
+					funcinfo.name,
+					table.concat(args, ","))
 	end
-
-        local frameInfoStr = string.format("%d @%s:%d %s",
-					   frameidx + fix,
-					   funcinfo.short_src or "<stdin>",
-					   funcinfo.currentline,
-					   funcinfoStr)
-	table.insert(out, frameInfoStr)
+	table.insert(out,
+		     string.format("%d @%s:%d %s",
+		     frameidx + fix,
+		     funcinfo.short_src or "<stdin>",
+		     funcinfo.currentline,
+		     funcstr))
 
 	local valuelines = {}
 	local function compare(k1, k2)
 		return indexmap[k1] < indexmap[k2]
 	end
 	for k, v in pairs_orderly(env, compare) do
-		local vs = dumpvalue(v)
-		table.insert(valuelines, string.format("\t%s:%s", k, vs))
+		if canPrint(k, v) then
+			local vs = dumpvalue(v)
+			if #vs > mVALUE_MAX_LEN then
+				vs = vs:sub(1, mVALUE_MAX_LEN) .. "..."
+			end
+			-- table.insert(valuelines, string.format("\t%s<%s>:%s", k, indexmap[k] or "", vs))
+			table.insert(valuelines, string.format("\t%s:%s", k, vs))
+		end
 	end
 
 	table.insert(out, table.concat(valuelines, "\n"))
@@ -209,15 +237,15 @@ function dumpstack(stack)
 	return list
 end
 
-function getstack(level)
+function getstack(level, maxframesz)
 	level = level or 2
 	local info = debug.getinfo(level, "nlSf")
-	local stacklist = getstack_from(info.short_src, info.currentline)
+	local stacklist = getstack_from(info.short_src, info.currentline, maxframesz)
 	return stacklist
 end
 
-function getfulltrace(level)
-	local fullstack = getstack(level)
+function getfulltrace(level, maxframesz)
+	local fullstack = getstack(level, maxframesz)
 	local list = dumpstack(fullstack)
 	local ret = {}
 	table.foreach(list, function(i, v)
@@ -226,6 +254,16 @@ function getfulltrace(level)
 	return table.concat(ret, "\n")
 end
 
+function settdmaxdeep(depth)
+	mTABLE_MAX_DEEP = depth or mTABLE_MAX_DEEP
+end
+
+function setvdmaxlen(len)
+	mVALUE_MAX_LEN = len or mVALUE_MAX_LEN
+end
+
+traceback.setvdmaxlen = setvdmaxlen
+traceback.settdmaxdeep = settdmaxdeep
 traceback.getenv = getenv
 traceback.getstack_from = getstack_from
 traceback.getstack = getstack

@@ -98,10 +98,18 @@ local function get_params(func)
 	return argNameList, info.nparams, info.isvararg
 end
 
+local uncomparedTypeMap = {
+	["table"] = true,
+	["userdata"] = true,
+	["function"] = true,
+	["boolean"] = true,
+	["thread"] = true,
+}
+
 local function compare(a, b)
 	local ta = type(a)
 	local tb = type(b)
-	if ta ~= tb or ta == "table" then
+	if ta ~= tb or uncomparedTypeMap[ta] or uncomparedTypeMap[tb] then
 		return tostring(a) < tostring(b)
 	end
 	return a < b

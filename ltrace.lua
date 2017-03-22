@@ -82,10 +82,10 @@ function getstack_from(callfile, callline, maxframesz)
 end
 
 local function get_params(func)
-	if not IS_LUAJIT then
+	if not IS_LUAJIT or _VERSION <= "Lua 5.1" then
 		return {}, -1, false
 	end
-	local info = debug.getinfo(func)
+	local info = debug.getinfo(func, "u")
 	if not info then return end
 	local argNameList = {}
 	for i = 1, info.nparams do

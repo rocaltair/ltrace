@@ -51,7 +51,7 @@ of each frame(with function name, filename and linenum) in lua call stack
 
 Variables show in each frame are sorted by declaration order.
 
-If you are using luajit, param names will be showed in brackets. See Example
+If you are using luajit or lua 5.2 later, param names will be showed in brackets. See Example
 
 ```
 frameidx @filepath.lua:linenum in <functionName()>
@@ -84,7 +84,7 @@ end)
 
 [test.lua](https://github.com/rocaltair/ltrace/blob/master/test.lua)
 
-this is a sample of err catching dumping (use luajit)
+this is a sample of err catching dumping (use luajit or lua 5.2 or later)
 
 ```
 test.lua:17: attempt to perform arithmetic on global 'nondefined_var' (a nil value)

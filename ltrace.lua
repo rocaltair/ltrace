@@ -7,7 +7,7 @@ Description : Description
 
 local IS_LUAJIT = jit and true or false
 
-local getenv
+local ltrace_getenv
 local getstack_from
 local getstack
 local dumpvalue
@@ -20,6 +20,31 @@ local mTABLE_MAX_DEEP = 3
 local mVALUE_MAX_LEN = 5120
 local traceback = {}
 
+local setfenv = _G.setfenv or function(f, t)
+	f = (type(f) == 'function' and f or debug.getinfo(f + 1, 'f').func)
+	local name
+	local up = 0 
+	repeat
+		up = up + 1 
+		name = debug.getupvalue(f, up) 
+	until name == '_ENV' or name == nil 
+	if name then
+		debug.upvaluejoin(f, up, function() return name end, 1)  -- use unique upvalue
+		debug.setupvalue(f, up, t)
+	end 
+end
+
+local getfenv = _G.getfenv or function(f)
+	f = (type(f) == 'function' and f or debug.getinfo(f + 1, 'f').func)
+	local name, val 
+	local up = 0 
+	repeat
+		up = up + 1 
+		name, val = debug.getupvalue(f, up) 
+	until name == '_ENV' or name == nil 
+	return val 
+end
+
 local function canPrint(k, v)
 	if type(v) ~= "table" then
 		return true
@@ -30,7 +55,7 @@ local function canPrint(k, v)
 	return true
 end
 
-function getenv(realframe)
+function ltrace_getenv(realframe)
 	local env = {}
 	local indexmap = {}
 	local i = 1
@@ -54,17 +79,17 @@ function getstack_from(callfile, callline, maxframesz)
 	assert(callfile and callline)
 	local realframe = 0
 	local framestack = {}
-	local env, funcinfo, indexmap = getenv(realframe)
+	local env, funcinfo, indexmap = ltrace_getenv(realframe)
 	while funcinfo do
 		if funcinfo.currentline == callline and funcinfo.short_src == callfile then
 			break
 		end
 		realframe = realframe + 1
-		env, funcinfo, indexmap = getenv(realframe)
+		env, funcinfo, indexmap = ltrace_getenv(realframe)
 	end
 	while funcinfo do
 		realframe = realframe + 1
-		env, funcinfo, indexmap = getenv(realframe)
+		env, funcinfo, indexmap = ltrace_getenv(realframe)
 		if not funcinfo then
 			break
 		end
@@ -118,9 +143,9 @@ end
 local function pairs_orderly(t, comp)
 	comp = comp or compare
 	local keys = {}
-	table.foreach(t, function(k, v)
+	for k, v in pairs(t) do
 		table.insert(keys, k)
-	end)
+	end
 	local size = #keys
 	table.sort(keys, comp)
 
@@ -249,9 +274,9 @@ function getfulltrace(level, maxframesz)
 	local fullstack = getstack(level, maxframesz)
 	local list = dumpstack(fullstack)
 	local ret = {}
-	table.foreach(list, function(i, v)
+	for i, v in pairs(list) do
 		table.insert(ret, v)
-	end)
+	end
 	return table.concat(ret, "\n")
 end
 

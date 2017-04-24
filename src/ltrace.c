@@ -32,7 +32,8 @@ static int get_params(lua_State *L,
 		e += snprintf(buff + e, buff_sz -e, "%s, ", name);
 		lua_pop(L, 1);
 	}
-	e -= 2;
+	if (e > 0)
+		e -= 2;
 	buff[e] = '\0';
 	if (isvararg) {
 		snprintf(buff + e, buff_sz - e, ", ...");

@@ -18,6 +18,29 @@
 #define TOP_MAX 15
 #define BOTTOM_MAX 10
 
+#if LUA_VERSION_NUM >= 502
+static int get_params(lua_State *L,
+		      char nparams, char isvararg,
+		      lua_Debug *ar,
+		      char *buff,
+		      size_t buff_sz)
+{
+	int i = 0;
+	const char *name;
+	size_t e = 0;
+	while ((name = lua_getlocal(L, ar, i++)) != NULL) {
+		e += snprintf(buff + e, buff_sz -e, "%s, ", name);
+		lua_pop(L, 1);
+	}
+	e -= 2;
+	buff[e] = '\0';
+	if (isvararg) {
+		snprintf(buff + e, buff_sz - e, ", ...");
+	}
+	return e;
+}
+#endif
+
 static size_t dump_lua_traceback(lua_State *L,
 				 char *buf, size_t sz,
 				 int is_show_var,
@@ -46,9 +69,13 @@ static size_t dump_lua_traceback(lua_State *L,
 		pushfstring(buf, e, "[%d]%s:", level - 2, ar.short_src);
 		if (ar.currentline > 0)
 			pushfstring(buf, e, "%d:", ar.currentline);
-		if (*ar.namewhat != '\0')
-			pushfstring(buf, e, " in function %s", ar.name);
-		else {
+		if (*ar.namewhat != '\0') {
+			char parambuf[256] = {0};
+#if LUA_VERSION_NUM >= 502
+			get_params(L, ar.nparams, ar.isvararg, parambuf, sizeof(parambuf));
+#endif
+			pushfstring(buf, e, " in function %s(%s)", ar.name, parambuf);
+		} else {
 			if (*ar.what == 'm')
 				pushfstring(buf, e, " in main chunk");
 			else if (*ar.what == 'C' || *ar.what == 't')

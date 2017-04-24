@@ -36,7 +36,7 @@ static int get_params(lua_State *L,
 		e -= 2;
 	buff[e] = '\0';
 	if (isvararg) {
-		snprintf(buff + e, buff_sz - e, ", ...");
+		e += snprintf(buff + e, buff_sz - e, ", ...");
 	}
 	return e;
 }

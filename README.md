@@ -1,5 +1,9 @@
 # ltrace
 
+## Two implemetations
+[ltrace.lua](ltrace.lua) pure lua
+[src/ltrace.c](src/ltrace.c) pure C, see [src/test.lua](src/test.lua)
+
 ## Description 
 
 ```How To Debug With Lua, Lots of print?```
@@ -111,4 +115,5 @@ test.lua:17: attempt to perform arithmetic on global 'nondefined_var' (a nil val
 5[C] : in <main>
 6[C] : in <C>
 ```
+
 

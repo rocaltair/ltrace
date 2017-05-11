@@ -6,7 +6,7 @@ SHARED_LIB = ltrace.so
 OBJS = ltrace.o
 
 LLIBS = 
-CFLAGS = -c -O3 -Wall -fPIC -Werror=declaration-after-statement
+CFLAGS = -c -O3 -Wall -fPIC -Werror=declaration-after-statement -std=c89
 LDFLAGS = -O3 -Wall --shared
 
 ifeq ($(PLATFORM),Linux)

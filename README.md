@@ -1,10 +1,11 @@
 # ltrace
 
-## Two implemetations
+## Two implementations
 
 [ltrace.lua](ltrace.lua) pure lua
 
-[src/ltrace.c](src/ltrace.c) pure C, see [src/test.lua](src/test.lua)
+[src/ltrace.c](src/ltrace.c) pure C, see [src/test.lua](src/test.lua), easy to use, but without table dumping, just call ltrace.traceback()
+
 
 ## Description 
 

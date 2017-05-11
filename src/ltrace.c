@@ -151,12 +151,12 @@ static int lua__traceback(lua_State *L)
 		LD = lua_tothread(L, 1);
 		lua_remove(L, 1);
 	}
-	is_show_var = lua_isnoneornil(L, 2) ? 1 : lua_toboolean(L, 2);
-	buff_sz = luaL_optinteger(L, 3, MAX_BUF_SZ);
+	is_show_var = lua_isnoneornil(L, 1) ? 1 : lua_toboolean(L, 1);
+	buff_sz = luaL_optinteger(L, 2, MAX_BUF_SZ);
 	if (buff_sz < MAX_BUF_SZ_MIN)
 		buff_sz = MAX_BUF_SZ_MIN;
-	top_max = luaL_optinteger(L, 4, TOP_MAX);
-	bottom_max = luaL_optinteger(L, 5, BOTTOM_MAX);
+	top_max = luaL_optinteger(L, 3, TOP_MAX);
+	bottom_max = luaL_optinteger(L, 4, BOTTOM_MAX);
 	buff = malloc(buff_sz);
 	if (buff == NULL)
 		return 0;

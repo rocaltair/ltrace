@@ -32,6 +32,7 @@ local setfenv = _G.setfenv or function(f, t)
 		debug.upvaluejoin(f, up, function() return name end, 1)  -- use unique upvalue
 		debug.setupvalue(f, up, t)
 	end 
+	return f
 end
 
 local getfenv = _G.getfenv or function(f)

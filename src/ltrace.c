@@ -9,7 +9,7 @@
 # endif
 #endif
 
-#define pushfstring(buf, e, fmt, ...) do{if(sz-e > 0) e+=snprintf(buf+e, sz-e, fmt, ##__VA_ARGS__);}while(0)
+#define pushfstring(buf, sz, e, fmt, ...) do{if(sz-e > 0) e+=snprintf(buf+e, sz-e, fmt, ##__VA_ARGS__);}while(0)
 
 #define MAX_BUF_SZ (1024 * 1024)
 #define MAX_BUF_SZ_MIN (8 * 1024)
@@ -58,31 +58,31 @@ static size_t dump_lua_traceback(lua_State *L,
 			if (!lua_getstack(L, level+bottom_max, &ar))
 				level--;
 			else {
-				pushfstring(buf, e, "%s", "\n...");
+				pushfstring(buf, sz, e, "%s", "\n...");
 				while (lua_getstack(L, level+bottom_max, &ar))
 					level++;
 			}
 			firstpart = 0;
 			continue;
 		}
-		pushfstring(buf, e, "\n");
+		pushfstring(buf, sz, e, "\n");
 		lua_getinfo(L, "Snl", &ar);
-		pushfstring(buf, e, "[%d]%s:", level - 2, ar.short_src);
+		pushfstring(buf, sz, e, "[%d]%s:", level - 2, ar.short_src);
 		if (ar.currentline > 0)
-			pushfstring(buf, e, "%d:", ar.currentline);
+			pushfstring(buf, sz, e, "%d:", ar.currentline);
 		if (*ar.namewhat != '\0') {
 			char parambuf[256] = {0};
 #if LUA_VERSION_NUM >= 502
 			get_params(L, ar.nparams, ar.isvararg, parambuf, sizeof(parambuf));
 #endif
-			pushfstring(buf, e, " in function %s(%s)", ar.name, parambuf);
+			pushfstring(buf, sz, e, " in function %s(%s)", ar.name, parambuf);
 		} else {
 			if (*ar.what == 'm')
-				pushfstring(buf, e, " in main chunk");
+				pushfstring(buf, sz, e, " in main chunk");
 			else if (*ar.what == 'C' || *ar.what == 't')
-				pushfstring(buf, e, " ?");
+				pushfstring(buf, sz, e, " ?");
 			else
-				pushfstring(buf, e, " in function <%s:%d>",
+				pushfstring(buf, sz, e, " in function <%s:%d>",
 					    ar.short_src, ar.linedefined);
 		}
 
@@ -100,42 +100,42 @@ static size_t dump_lua_traceback(lua_State *L,
 				break;
 			type = lua_type(L, -1);
 			typename = lua_typename(L, type);
-			pushfstring(buf, e, "\n\t%s(%s) : ", name, typename);
+			pushfstring(buf, sz, e, "\n\t%s(%s) : ", name, typename);
 			switch(type) {
 			case LUA_TFUNCTION:
 				pointer = lua_topointer(L, -1);
 				lua_getinfo(L, ">Snl", &arf);
 				if (*arf.what == 'C' || *arf.what == 't')
-					pushfstring(buf, e, "%p %s@C",
+					pushfstring(buf, sz, e, "%p %s@C",
 						    pointer,
 						    (arf.name != NULL ? arf.name : "defined"));
 				else
-					pushfstring(buf, e, "%p %s@%s:%d",
+					pushfstring(buf, sz, e, "%p %s@%s:%d",
 						    pointer,
 						    (arf.name != NULL ? arf.name : "defined"),
 						    arf.short_src, arf.linedefined);
 				break;
 			case LUA_TBOOLEAN:
-				pushfstring(buf, e, "%s", lua_toboolean(L, 1) ? "true" : "false");
+				pushfstring(buf, sz, e, "%s", lua_toboolean(L, 1) ? "true" : "false");
 				lua_pop(L, 1);
 				break;
 			case LUA_TNIL:
-				pushfstring(buf, e, "nil");
+				pushfstring(buf, sz, e, "nil");
 				lua_pop(L, 1);
 				break;
 			case LUA_TNUMBER:
 			case LUA_TSTRING:
-				pushfstring(buf, e, "%s", lua_tostring(L, -1));
+				pushfstring(buf, sz, e, "%s", lua_tostring(L, -1));
 				lua_pop(L, 1);
 				break;
 			default:
-				pushfstring(buf, e, "%p", lua_topointer(L, -1));
+				pushfstring(buf, sz, e, "%p", lua_topointer(L, -1));
 				lua_pop(L, 1);
 				break;
 			}
 		}
 	}
-	pushfstring(buf, e, "\n");
+	pushfstring(buf, sz, e, "\n");
 	return e;
 }
 

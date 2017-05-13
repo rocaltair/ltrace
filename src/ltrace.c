@@ -73,7 +73,7 @@ static size_t dump_lua_traceback(lua_State *L,
 		if (*ar.namewhat != '\0') {
 			char parambuf[256] = {0};
 #if LUA_VERSION_NUM >= 502
-			get_params(L, ar.nparams, ar.isvararg, parambuf, sizeof(parambuf));
+			get_params(L, ar.nparams, ar.isvararg, &ar, parambuf, sizeof(parambuf));
 #endif
 			pushfstring(buf, sz, e, " in function %s(%s)", ar.name, parambuf);
 		} else {
@@ -124,8 +124,11 @@ static size_t dump_lua_traceback(lua_State *L,
 				lua_pop(L, 1);
 				break;
 			case LUA_TNUMBER:
-			case LUA_TSTRING:
 				pushfstring(buf, sz, e, "%s", lua_tostring(L, -1));
+				lua_pop(L, 1);
+				break;
+			case LUA_TSTRING:
+				pushfstring(buf, sz, e, "\"%s\"", lua_tostring(L, -1));
 				lua_pop(L, 1);
 				break;
 			default:

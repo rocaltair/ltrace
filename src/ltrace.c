@@ -45,6 +45,7 @@ static int get_params(lua_State *L,
 static size_t dump_lua_traceback(lua_State *L,
 				 char *buf, size_t sz,
 				 int is_show_var,
+				 int is_show_tmp_var,
 				 int top_max, int bottom_max)
 {
 	size_t e = 0;
@@ -65,7 +66,10 @@ static size_t dump_lua_traceback(lua_State *L,
 			firstpart = 0;
 			continue;
 		}
-		pushfstring(buf, sz, e, "\n");
+
+		if (level > 2)
+			pushfstring(buf, sz, e, "\n");
+
 		lua_getinfo(L, "Snl", &ar);
 		pushfstring(buf, sz, e, "[%d]%s:", level - 2, ar.short_src);
 		if (ar.currentline > 0)
@@ -98,6 +102,8 @@ static size_t dump_lua_traceback(lua_State *L,
 			const char *typename;
 			if (name == NULL)
 				break;
+			if (!is_show_tmp_var && name[0] == '(')
+				continue;
 			type = lua_type(L, -1);
 			typename = lua_typename(L, type);
 			pushfstring(buf, sz, e, "\n\t%s(%s) : ", name, typename);
@@ -138,7 +144,6 @@ static size_t dump_lua_traceback(lua_State *L,
 			}
 		}
 	}
-	pushfstring(buf, sz, e, "\n");
 	return e;
 }
 
@@ -149,21 +154,27 @@ static int lua__traceback(lua_State *L)
 	size_t buff_sz;
 	char *buff = NULL;
 	size_t len = 0;
+	int is_show_tmp_var = 0;
 	lua_State *LD = L;
 	if (lua_isthread(L, 1)) {
 		LD = lua_tothread(L, 1);
 		lua_remove(L, 1);
 	}
-	is_show_var = lua_isnoneornil(L, 1) ? 1 : lua_toboolean(L, 1);
-	buff_sz = luaL_optinteger(L, 2, MAX_BUF_SZ);
+	top_max = luaL_optinteger(L, 1, TOP_MAX);
+	bottom_max = luaL_optinteger(L, 2, BOTTOM_MAX);
+	is_show_var = lua_isnoneornil(L, 3) ? 1 : lua_toboolean(L, 3);
+	is_show_tmp_var = lua_isnoneornil(L, 4) ? 1 : lua_toboolean(L, 4);
+	buff_sz = luaL_optinteger(L, 5, MAX_BUF_SZ);
+
 	if (buff_sz < MAX_BUF_SZ_MIN)
 		buff_sz = MAX_BUF_SZ_MIN;
-	top_max = luaL_optinteger(L, 3, TOP_MAX);
-	bottom_max = luaL_optinteger(L, 4, BOTTOM_MAX);
 	buff = malloc(buff_sz);
 	if (buff == NULL)
 		return 0;
-	len = dump_lua_traceback(LD, buff, buff_sz, is_show_var, top_max, bottom_max);
+	len = dump_lua_traceback(LD,
+				 buff, buff_sz,
+				 is_show_var, is_show_tmp_var,
+				 top_max, bottom_max);
 	lua_pushlstring(L, buff, len);
 	free(buff);
 	return 1;

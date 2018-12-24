@@ -18,7 +18,11 @@ local getfulltrace
 
 local mTABLE_MAX_DEEP = 3
 local mVALUE_MAX_LEN = 5120
+local dumpers = {
+	["_G"] = false,
+}
 local traceback = {}
+traceback.dumpers = dumpers
 
 local setfenv = _G.setfenv or function(f, t)
 	f = (type(f) == 'function' and f or debug.getinfo(f + 1, 'f').func)
@@ -46,16 +50,6 @@ local getfenv = _G.getfenv or function(f)
 	return val 
 end
 
-local function canPrint(k, v)
-	if type(v) ~= "table" then
-		return true
-	end
-	if v == _G then
-		return false
-	end
-	return true
-end
-
 function ltrace_getenv(realframe)
 	local env = {}
 	local indexmap = {}
@@ -76,18 +70,11 @@ function ltrace_getenv(realframe)
 	return env, funcinfo, indexmap
 end
 
-function getstack_from(callfile, callline, maxframesz)
-	assert(callfile and callline)
-	local realframe = 0
+function getstack_from(level,maxframesz)
+	-- ignore 2 level : ltrace_getenv + getstack_from
+	local realframe = level + 2
 	local framestack = {}
 	local env, funcinfo, indexmap = ltrace_getenv(realframe)
-	while funcinfo do
-		if funcinfo.currentline == callline and funcinfo.short_src == callfile then
-			break
-		end
-		realframe = realframe + 1
-		env, funcinfo, indexmap = ltrace_getenv(realframe)
-	end
 	while funcinfo do
 		realframe = realframe + 1
 		env, funcinfo, indexmap = ltrace_getenv(realframe)
@@ -160,9 +147,6 @@ local function pairs_orderly(t, comp)
 	end
 end
 
-local ignoreMap = {
-}
-
 function dumptable(value, depth)
 	assert(type(value) == "table")
 	local rettbl = {}
@@ -174,10 +158,11 @@ function dumptable(value, depth)
 	table.insert(rettbl, '{')
 	local content = {}
 	for k, v in pairs_orderly(value) do
-		if not ignoreMap[k] and canPrint(k, v) then
+		if dumpers[k] ~= false then
+			local dumper = dumpers[k] and dumpers[k] or dumpvalue
 			local line = {}
 			table.insert(line, dumpkey(k, depth) .. "=")
-			table.insert(line, dumpvalue(v, depth))
+			table.insert(line, dumper(v, depth))
 			table.insert(content, table.concat(line))
 		end
 	end
@@ -241,8 +226,9 @@ function dumpframe(frameidx, env, funcinfo, indexmap)
 		return indexmap[k1] < indexmap[k2]
 	end
 	for k, v in pairs_orderly(env, compare) do
-		if canPrint(k, v) then
-			local vs = dumpvalue(v)
+		if dumpers[k] ~= false then
+			local dumper = dumpers[k] and dumpers[k] or dumpvalue
+			local vs = dumper(v)
 			if #vs > mVALUE_MAX_LEN then
 				vs = vs:sub(1, mVALUE_MAX_LEN) .. "..."
 			end
@@ -257,7 +243,7 @@ end
 
 function dumpstack(stack)
 	local list = {}
-	for i, v in pairs(stack) do
+	for i, v in ipairs(stack) do
 		local s = dumpframe(i, v.env, v.funcinfo, v.indexmap)
 		table.insert(list, s)
 	end
@@ -267,7 +253,7 @@ end
 function getstack(level, maxframesz)
 	level = level or 2
 	local info = debug.getinfo(level, "nlSf")
-	local stacklist = getstack_from(info.short_src, info.currentline, maxframesz)
+	local stacklist = getstack_from(level,maxframesz)
 	return stacklist
 end
 
@@ -275,7 +261,7 @@ function getfulltrace(level, maxframesz)
 	local fullstack = getstack(level, maxframesz)
 	local list = dumpstack(fullstack)
 	local ret = {}
-	for i, v in pairs(list) do
+	for i, v in ipairs(list) do
 		table.insert(ret, v)
 	end
 	return table.concat(ret, "\n")

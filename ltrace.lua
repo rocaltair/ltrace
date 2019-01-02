@@ -165,6 +165,16 @@ local ignoreMap = {
 
 function dumptable(value, depth)
 	assert(type(value) == "table")
+	local tostr
+	local meta = getmetatable(value)
+	if meta and meta.__tostring then
+		tostr = meta.__tostring
+	elseif value.__tostring then
+		tostr = value.__tostring
+	end
+	if tostr then
+		return tostr(value)
+	end
 	local rettbl = {}
 	depth = (depth or 0) + 1
 	if depth > mTABLE_MAX_DEEP then
